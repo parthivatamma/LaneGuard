@@ -1,0 +1,65 @@
+[
+  {
+    "id": 1,
+    "track_id": 5,
+    "type": "INTRUSION",
+    "timestamp": 0.06673333333333334,
+    "clip": "20261011_221517_event_0001_t000000067ms.mp4"
+  },
+  {
+    "id": 2,
+    "track_id": 5,
+    "type": "INTRUSION",
+    "timestamp": 0.16683333333333333,
+    "clip": "20261011_221517_event_0002_t000000167ms.mp4"
+  },
+  {
+    "id": 3,
+    "track_id": 56,
+    "type": "INTRUSION",
+    "timestamp": 3.4701333333333335,
+    "clip": "20261011_221517_event_0003_t000003470ms.mp4"
+  },
+  {
+    "id": 4,
+    "track_id": 164,
+    "type": "INTRUSION",
+    "timestamp": 3.636966666666667,
+    "clip": "20261011_221517_event_0004_t000003637ms.mp4"
+  },
+  {
+    "id": 5,
+    "track_id": 163,
+    "type": "INTRUSION",
+    "timestamp": 4.571233333333334,
+    "clip": "20261011_221517_event_0005_t000004571ms.mp4"
+  },
+  {
+    "id": 6,
+    "track_id": 297,
+    "type": "INTRUSION",
+    "timestamp": 11.011000000000001,
+    "clip": "20261011_221517_event_0006_t000011011ms.mp4"
+  },
+  {
+    "id": 7,
+    "track_id": 297,
+    "type": "INTRUSION",
+    "timestamp": 11.077733333333333,
+    "clip": "20261011_221517_event_0007_t000011078ms.mp4"
+  },
+  {
+    "id": 8,
+    "track_id": 414,
+    "type": "INTRUSION",
+    "timestamp": 20.553866666666668,
+    "clip": "20261011_221517_event_0008_t000020554ms.mp4"
+  },
+  {
+    "id": 9,
+    "track_id": 435,
+    "type": "INTRUSION",
+    "timestamp": 21.755066666666668,
+    "clip": "20261011_221517_event_0009_t000021755ms.mp4"
+  }
+]
