@@ -50,6 +50,12 @@ The displayed window shows:
 - Green polygon labeled `LANE / INTRUSION ZONE`: the exact polygon loaded from
   `lane.json`. An object's bottom-center point (the center of the bottom edge
   of its box) is tested against this polygon.
+- Optional ground-plane calibration: in the dashboard, click **Pick four
+  corners**, select a known pavement rectangle clockwise, enter its real width
+  and length in feet, and save it. The calibration is stored beside the
+  polygon in `lane.json`. The runner then filters each track in metres and can
+  emit a `TIME_TO_ARRIVAL` event when its filtered forward closing time to the
+  configured taper is at most three seconds.
 
 On a Jetson, use the GStreamer source string described in `Design.md` and
 `--alert gpio`. Desktop and Windows runs use the console sink by default.

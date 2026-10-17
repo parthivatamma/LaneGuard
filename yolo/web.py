@@ -73,6 +73,7 @@ aside h2{border-bottom:1px solid var(--line);padding-bottom:8px}.side-card{backg
 </section>
 <aside class="card">
 <div class="side-card"><h2>Lane polygon</h2><p><button id="editLane" type="button">Edit lane</button> <button id="testAlarm" type="button">Test alarm</button></p><p class="muted">Click <b>Edit lane</b> to load a frame and redraw the closed intrusion polygon.</p></div>
+<div class="side-card"><h2>Ground-plane calibration</h2><p class="muted">Click four corners of a known pavement rectangle in clockwise order. The default is one 12 ft lane stripe segment (10 ft).</p><div class="lcs-fields"><input id="calibWidth" type="number" value="12" min="0.1" step="0.1" placeholder="Width (ft)"><input id="calibLength" type="number" value="10" min="0.1" step="0.1" placeholder="Length (ft)"></div><button id="startCalibration" type="button">Pick four corners</button> <button id="clearCalibration" type="button">Clear calibration points</button> <button id="saveCalibration" type="button">Save calibration</button><span id="calibrationStatus" class="muted"></span></div>
 <div class="side-card"><h2>Active closure</h2><div id="activeClosure"><p><strong id="closureState">inactive</strong> <span class="muted">No linked closure</span></p><p class="muted">Select a Caltrans closure below to link it to this camera.</p></div><div class="lcs-fields"><input id="operatorName" placeholder="Operator name"><input id="crewName" placeholder="Crew / unit"><input id="operatorNotes" placeholder="Operator notes"></div><p><button id="linkClosure" type="button">Link closure</button> <button id="unlinkClosure" type="button">Unlink</button></p><p class="muted">Local operator metadata; not an official Caltrans record.</p></div>
 <div class="side-card"><h2>Caltrans closures</h2><select id="lcsDistrict"><option value="4">District 4 · Bay Area</option><option value="1">District 1 · Eureka</option><option value="2">District 2 · Redding</option><option value="3">District 3 · Marysville / Sacramento</option><option value="5">District 5 · San Luis Obispo</option><option value="6">District 6 · Fresno</option><option value="7">District 7 · Los Angeles</option><option value="8">District 8 · San Bernardino</option><option value="9">District 9 · Bishop</option><option value="10">District 10 · Stockton</option><option value="11">District 11 · San Diego</option><option value="12">District 12 · Orange County</option></select><input id="lcsSearch" placeholder="Search route, county, or location"><button id="loadClosures" type="button">Load closures</button><div id="lcsResults" class="lcs-results muted">Load a district to choose the active closure.</div></div>
 <h2>Events</h2><div id="events">Loading...</div></aside>
@@ -96,7 +97,7 @@ aside h2{border-bottom:1px solid var(--line);padding-bottom:8px}.side-card{backg
 <script>
 const video=document.getElementById("video"), list=document.getElementById("events"), download=document.getElementById("download"), downloadAnnotated=document.getElementById("downloadAnnotated"), sourceInput=document.getElementById("source"), playerHelp=document.getElementById("playerHelp");
 const alarm=document.getElementById("alarm"), alarmText=document.getElementById("alarmText"), canvas=document.getElementById("polygonCanvas"), ctx=canvas.getContext("2d");
-let polygon=[], latestEvent=0, eventsInitialized=false, frameImage=null, showingAnnotated=false;
+let polygon=[], calibrationPoints=[], calibrationMode=false, latestEvent=0, eventsInitialized=false, frameImage=null, showingAnnotated=false;
 if(sourceInput.value==="__PROJECT_ROOT__"||sourceInput.value==="")sourceInput.value="__DEFAULT_SOURCE__";
 function time(s){return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`}
 async function loadEvents(){const events=await fetch("/events.json?"+Date.now()).then(r=>r.json());document.getElementById("metricEvents").textContent=events.length;
@@ -123,11 +124,14 @@ document.getElementById("testAlarm").onclick=()=>{alarmText.textContent="TEST AL
 document.getElementById("loadClosures").onclick=async()=>{const box=document.getElementById("lcsResults");box.textContent="Loading Caltrans closures...";const q=encodeURIComponent(document.getElementById("lcsSearch").value);const district=document.getElementById("lcsDistrict").value;const r=await fetch(`/api/lcs?district=${district}&q=${q}`);const data=await r.json();if(!data.ok){box.textContent=data.error;return}box.innerHTML="";if(!data.closures.length){box.textContent="No matching closures.";return}data.closures.forEach(c=>{const b=document.createElement("button");b.className="lcs-result";b.innerHTML=`<b>${c.status} · SR-${c.route||"?"}</b><br><span class="muted">${c.county||""} · ${c.beginLocation||c.nearbyPlace||""} · ${c.typeOfClosure||""}</span>`;b.onclick=async()=>{const saved=await fetch("/api/site",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({lcs:c})}).then(r=>r.json());box.textContent=saved.ok?"Closure selected. Add operator details, then click Link closure.":saved.error||"Could not save closure";loadSite()};box.appendChild(b)})};
 document.getElementById("linkClosure").onclick=async()=>{const current=await fetch("/api/site").then(r=>r.json());if(!current.site||!current.site.lcs){document.getElementById("activeClosure").textContent="Select a Caltrans closure first.";return}const payload={...current.site,operator:document.getElementById("operatorName").value.trim(),crew:document.getElementById("crewName").value.trim(),notes:document.getElementById("operatorNotes").value.trim()};await fetch("/api/site",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});loadSite()};
 document.getElementById("unlinkClosure").onclick=async()=>{await fetch("/api/site",{method:"DELETE"});loadSite()};
-function redraw(){if(!frameImage)return;ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(frameImage,0,0);if(polygon.length){ctx.strokeStyle="#00ff00";ctx.lineWidth=Math.max(2,canvas.width/500);ctx.beginPath();polygon.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));if(polygon.length>2)ctx.closePath();ctx.stroke()}polygon.forEach((p,i)=>{ctx.fillStyle="#00ff00";ctx.beginPath();ctx.arc(p.x,p.y,Math.max(4,canvas.width/250),0,Math.PI*2);ctx.fill();ctx.fillStyle="#111827";ctx.font=`${Math.max(14,canvas.width/80)}px sans-serif`;ctx.fillText(String(i+1),p.x+8,p.y-8)})}
+function redraw(){if(!frameImage)return;ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(frameImage,0,0);if(polygon.length){ctx.strokeStyle="#00ff00";ctx.lineWidth=Math.max(2,canvas.width/500);ctx.beginPath();polygon.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));if(polygon.length>2)ctx.closePath();ctx.stroke()}polygon.forEach((p,i)=>{ctx.fillStyle="#00ff00";ctx.beginPath();ctx.arc(p.x,p.y,Math.max(4,canvas.width/250),0,Math.PI*2);ctx.fill();ctx.fillStyle="#111827";ctx.font=`${Math.max(14,canvas.width/80)}px sans-serif`;ctx.fillText(String(i+1),p.x+8,p.y-8)});calibrationPoints.forEach((p,i)=>{ctx.fillStyle="#f59e0b";ctx.beginPath();ctx.arc(p[0],p[1],Math.max(5,canvas.width/220),0,Math.PI*2);ctx.fill();ctx.fillStyle="#111827";ctx.fillText(`C${i+1}`,p[0]+8,p[1]-8)})}
 function loadFrame(){if(!video.videoWidth||!video.videoHeight){document.getElementById("polygonStatus").textContent="The video has not provided a frame yet.";return}canvas.width=video.videoWidth;canvas.height=video.videoHeight;frameImage=document.createElement("canvas");frameImage.width=canvas.width;frameImage.height=canvas.height;frameImage.getContext("2d").drawImage(video,0,0,canvas.width,canvas.height);polygon=[];redraw();document.getElementById("polygonStatus").textContent=`Frame size: ${canvas.width} × ${canvas.height}. Click points on this frame.`}
 document.getElementById("loadFrame").onclick=()=>{if(!video.videoWidth){document.getElementById("polygonStatus").textContent="Click Load video first.";return}loadFrame()};
-canvas.onclick=e=>{if(!frameImage)return;const r=canvas.getBoundingClientRect();const x=Math.max(0,Math.min(canvas.width,Math.round((e.clientX-r.left)*canvas.width/r.width)));const y=Math.max(0,Math.min(canvas.height,Math.round((e.clientY-r.top)*canvas.height/r.height)));polygon.push({x,y});redraw();document.getElementById("polygonStatus").textContent=`Point ${polygon.length}: (${x}, ${y})`};
+canvas.onclick=e=>{if(!frameImage)return;const r=canvas.getBoundingClientRect();const x=Math.max(0,Math.min(canvas.width,Math.round((e.clientX-r.left)*canvas.width/r.width)));const y=Math.max(0,Math.min(canvas.height,Math.round((e.clientY-r.top)*canvas.height/r.height)));if(calibrationMode){if(calibrationPoints.length<4)calibrationPoints.push([x,y]);redraw();document.getElementById("calibrationStatus").textContent=`Calibration point ${calibrationPoints.length}/4`;return}polygon.push({x,y});redraw();document.getElementById("polygonStatus").textContent=`Point ${polygon.length}: (${x}, ${y})`};
 document.getElementById("clearPolygon").onclick=()=>{polygon=[];redraw()};
+document.getElementById("startCalibration").onclick=()=>{calibrationMode=true;calibrationPoints=[];document.getElementById("calibrationStatus").textContent="Click four corners in clockwise order."};
+document.getElementById("clearCalibration").onclick=()=>{calibrationMode=false;calibrationPoints=[];redraw();document.getElementById("calibrationStatus").textContent="Calibration points cleared."};
+document.getElementById("saveCalibration").onclick=async()=>{if(calibrationPoints.length!==4){document.getElementById("calibrationStatus").textContent="Choose four calibration points first.";return}const width=Number(document.getElementById("calibWidth").value)*0.3048,length=Number(document.getElementById("calibLength").value)*0.3048;const world=[[0,0],[width,0],[width,length],[0,length]];const r=await fetch("/api/calibration",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({image_points:calibrationPoints,world_points:world,taper_world:[0,length],arrival_threshold:3})});const saved=await r.json();document.getElementById("calibrationStatus").textContent=saved.ok?"Calibration saved.":saved.error||saved.message};
 document.getElementById("savePolygon").onclick=async()=>{if(polygon.length<3){document.getElementById("polygonStatus").textContent="Choose at least three points.";return}const source=document.querySelector("[name=source]").value;const r=await fetch("/api/lane",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({points:polygon.map(p=>[p.x,p.y])})});const saved=await r.json();if(saved.ok){const started=await fetch("/api/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})}).then(r=>r.json());document.getElementById("polygonStatus").textContent=started.error||"Polygon saved; detection started.";showingAnnotated=false;video.src="/source?"+Date.now();download.href="/source";download.textContent="Download source";video.load();playerHelp.textContent="Detection is running. The player will switch to the full overlaid video when processing finishes.";status()}else document.getElementById("polygonStatus").textContent=saved.message};
 status();setInterval(status,2000);
 </script>
@@ -221,14 +225,39 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 if len(points) < 3:
                     raise ValueError("at least three points are required")
                 normalized = [[float(point[0]), float(point[1])] for point in points]
+                existing = {}
+                if lane_path.is_file():
+                    existing = json.loads(lane_path.read_text(encoding="utf-8"))
                 lane_path.parent.mkdir(parents=True, exist_ok=True)
-                lane_path.write_text(
-                    json.dumps({"points": normalized}, indent=2) + "\n",
-                    encoding="utf-8",
-                )
+                saved = {"points": normalized}
+                if isinstance(existing.get("calibration"), dict):
+                    saved["calibration"] = existing["calibration"]
+                lane_path.write_text(json.dumps(saved, indent=2) + "\n", encoding="utf-8")
                 self._send_json({"ok": True, "message": f"Saved {lane_path}"})
             except (KeyError, TypeError, ValueError, OSError, json.JSONDecodeError) as exc:
                 self._send_json({"ok": False, "message": f"Could not save polygon: {exc}"})
+            return
+        if path == "/api/calibration":
+            try:
+                from .calib import fit_ground_plane
+                values = json.loads(body.decode("utf-8"))
+                image_points = [tuple(float(value) for value in point) for point in values["image_points"]]
+                world_points = [tuple(float(value) for value in point) for point in values["world_points"]]
+                matrix = fit_ground_plane(image_points, world_points).matrix
+                taper = [float(value) for value in values["taper_world"]]
+                if len(taper) != 2:
+                    raise ValueError("taper_world must contain two coordinates")
+                lane_path = self.dashboard.lane
+                saved = json.loads(lane_path.read_text(encoding="utf-8"))
+                saved["calibration"] = {
+                    "homography": matrix,
+                    "taper_world": taper,
+                    "arrival_threshold": float(values.get("arrival_threshold", 3.0)),
+                }
+                lane_path.write_text(json.dumps(saved, indent=2) + "\n", encoding="utf-8")
+                self._send_json({"ok": True, "message": f"Saved calibration to {lane_path}"})
+            except (KeyError, TypeError, ValueError, OSError, json.JSONDecodeError) as exc:
+                self._send_json({"ok": False, "error": f"Could not save calibration: {exc}"})
             return
         if path == "/api/site":
             try:

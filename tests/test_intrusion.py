@@ -1,4 +1,5 @@
 from yolo.intrusion import IntrusionEventType, IntrusionState, IntrusionTracker
+from yolo.calib import GroundPlane
 
 
 def track(track_id: int, x: float, y: float) -> dict[str, float | int]:
@@ -36,3 +37,15 @@ def test_stale_tracks_are_purged() -> None:
     tracker.update(0, [track(8, 20, 20)])
     tracker.update(2.1, [])
     assert tracker.tracked_ids() == set()
+
+
+def test_calibrated_tracker_emits_time_to_arrival_before_polygon_entry() -> None:
+    tracker = IntrusionTracker(
+        [(0, 0), (10, 0), (10, 10), (0, 10)],
+        ground_plane=GroundPlane(((1, 0, 0), (0, 1, 0), (0, 0, 1))),
+        taper_world=(0, 10),
+        arrival_threshold=3,
+    )
+    tracker.update(0, [track(2, 5, 0)])
+    events = tracker.update(1, [track(2, 5, 3)])
+    assert [event.event_type for event in events] == [IntrusionEventType.TIME_TO_ARRIVAL]

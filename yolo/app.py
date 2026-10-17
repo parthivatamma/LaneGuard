@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .alerts import create_alert_sink
+from .calib import GroundPlane
 from .intrusion import IntrusionEvent, IntrusionState, IntrusionTracker
 from .lcs import event_stamp, load_site
 
@@ -32,6 +33,22 @@ def load_lane(path: Path) -> list[tuple[float, float]]:
     if len(result) < 3:
         raise ValueError(f"lane polygon file {path} contains fewer than three points")
     return result
+
+
+def load_lane_calibration(path: Path) -> tuple[GroundPlane | None, tuple[float, float] | None, float]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        calibration = data.get("calibration")
+        if not calibration:
+            return None, None, 3.0
+        ground_plane = GroundPlane(tuple(tuple(float(value) for value in row) for row in calibration["homography"]))
+        taper = tuple(float(value) for value in calibration["taper_world"])
+        if len(taper) != 2:
+            raise ValueError("taper_world must contain two coordinates")
+        arrival_threshold = float(calibration.get("arrival_threshold", 3.0))
+        return ground_plane, (taper[0], taper[1]), arrival_threshold
+    except (OSError, KeyError, TypeError, ValueError, IndexError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid lane calibration file {path}") from exc
 
 
 class EvidenceBuffer:
@@ -254,6 +271,7 @@ def run(args: argparse.Namespace) -> int:
         ) from exc
 
     lane = load_lane(args.lane)
+    ground_plane, taper_world, arrival_threshold = load_lane_calibration(args.lane)
     model = YOLO(str(args.model))
     source: str | int = int(args.source) if args.source.isdecimal() else args.source
     if isinstance(source, str):
@@ -281,6 +299,9 @@ def run(args: argparse.Namespace) -> int:
         movement_threshold=args.movement_threshold,
         stopped_time_threshold=args.stopped_seconds,
         timeout=args.track_timeout,
+        ground_plane=ground_plane,
+        taper_world=taper_world,
+        arrival_threshold=arrival_threshold,
     )
     alerts = create_alert_sink(args.alert, args.gpio_pin, args.gpio_pulse_seconds)
     event_index = 0

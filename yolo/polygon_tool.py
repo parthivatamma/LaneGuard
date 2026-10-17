@@ -7,11 +7,18 @@ import json
 from pathlib import Path
 
 
-def save_polygon(points: list[tuple[int, int]], path: Path) -> None:
+def save_polygon(
+    points: list[tuple[int, int]],
+    path: Path,
+    calibration: dict[str, object] | None = None,
+) -> None:
     if len(points) < 3:
         raise ValueError("at least three points are required")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"points": points}, indent=2) + "\n", encoding="utf-8")
+    data: dict[str, object] = {"points": points}
+    if calibration is not None:
+        data["calibration"] = calibration
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
 def select_polygon(source: str, output: Path) -> None:
